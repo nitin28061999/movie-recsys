@@ -4,7 +4,7 @@ from recsys.data import temporal_split
 def test_no_overlap_and_nothing_lost(ratings):
     train, val, test = temporal_split(ratings)
     assert len(train) + len(val) + len(test) == len(ratings)
-    keys = lambda d: set(zip(d.userId, d.movieId, d.timestamp))  # noqa: E731
+    keys = lambda d: set(zip(d.userId, d.movieId, d.timestamp))
     assert not (keys(train) & keys(val)) and not (keys(train) & keys(test))
     assert not (keys(val) & keys(test))
 

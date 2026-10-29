@@ -31,6 +31,11 @@ def load_movies(path=None) -> pd.DataFrame:
     return pd.read_csv(path / "movies.csv")  # movieId, title, genres
 
 
+def load_tags(path=None) -> pd.DataFrame:
+    path = path or (config.DATA_RAW / config.MOVIELENS_DIRNAME)
+    return pd.read_csv(path / "tags.csv")  # userId, movieId, tag, timestamp
+
+
 def temporal_split(
     ratings: pd.DataFrame,
     val_frac: float = config.VAL_FRAC,

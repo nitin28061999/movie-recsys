@@ -2,8 +2,14 @@
 import pandas as pd
 
 from recsys import config, metrics
-from recsys.data import download_movielens, load_ratings, temporal_split
-from recsys.models import PopularityRecommender, Recommender
+from recsys.data import (
+    download_movielens,
+    load_movies,
+    load_ratings,
+    load_tags,
+    temporal_split,
+)
+from recsys.models import ContentBasedRecommender, PopularityRecommender, Recommender
 
 
 def evaluate_model(
@@ -37,10 +43,15 @@ def evaluate_model(
 def main() -> None:
     download_movielens()
     ratings = load_ratings()
-    train, val, test = temporal_split(ratings)
-    n_items = ratings["movieId"].nunique()
+    train, val, _ = temporal_split(ratings)
+    movies, tags = load_movies(), load_tags()
+    n_items = len(movies)  # coverage is measured against the full catalog
 
-    models: list[Recommender] = [PopularityRecommender()]  # add new models here
+    models: list[Recommender] = [  # add new models here
+        PopularityRecommender(),
+        ContentBasedRecommender(movies),
+        ContentBasedRecommender(movies, tags),
+    ]
     rows = [evaluate_model(m.fit(train), val, n_items) for m in models]
     print(pd.DataFrame(rows).round(4).to_string(index=False))
 
