@@ -1,4 +1,3 @@
-﻿
 """FastAPI service for the MovieLens hybrid recommender."""
 
 from contextlib import asynccontextmanager
@@ -45,9 +44,17 @@ def build_recommender():
 @asynccontextmanager
 async def lifespan(application: FastAPI):
     """Load data and fit models once when the API starts."""
-    application.state.recommender, application.state.movies, application.state.ratings = (
-        build_recommender()
-    )
+    recommender, movies, ratings = build_recommender()
+    state = application.state
+    state.recommender, state.movies, state.ratings = recommender, movies, ratings
+    # Built once here instead of on every request.
+    state.movie_lookup = movies.set_index("movieId")
+    # Users at least one component can personalise for; everyone else gets popularity.
+    state.personalized_users = {
+        user
+        for model, _ in recommender.components
+        for user in model.user_index_  # pyright: ignore[reportAttributeAccessIssue]
+    }
     yield
 
 
@@ -61,6 +68,7 @@ app = FastAPI(
 
 @app.get("/")
 def root():
+    """Confirm the service is up and point to the interactive docs."""
     return {
         "message": "Movie Recommendation API is running",
         "docs": "/docs",
@@ -69,6 +77,7 @@ def root():
 
 @app.get("/health")
 def health():
+    """Liveness check for hosting platforms and monitors."""
     return {"status": "ok"}
 
 
@@ -79,9 +88,7 @@ def search_movies(
 ):
     """Search movie titles by a case-insensitive substring."""
     movies = app.state.movies
-    matches = movies[
-        movies["title"].str.contains(q, case=False, na=False, regex=False)
-    ].head(limit)
+    matches = movies[movies["title"].str.contains(q, case=False, na=False, regex=False)].head(limit)
 
     return {
         "count": len(matches),
@@ -101,22 +108,23 @@ def get_recommendations(
     user_id: int,
     k: int = Query(default=10, ge=1, le=50),
 ):
-    """Return recommendations for a MovieLens user ID."""
+    """Return recommendations for a MovieLens user ID.
+
+    Users with no usable rating history get the most popular unseen movies instead;
+    `personalized` and `strategy` say which of the two the caller received.
+    """
     if user_id < 1:
         raise HTTPException(status_code=400, detail="user_id must be positive")
 
     recommender = app.state.recommender
-    movie_lookup = app.state.movies.set_index("movieId")
+    movie_lookup = app.state.movie_lookup
+    personalized = user_id in app.state.personalized_users
 
-    movie_ids = recommender.recommend(user_id, k)
     results = []
-
-    for movie_id in movie_ids:
+    for movie_id in recommender.recommend(user_id, k):
         if movie_id not in movie_lookup.index:
             continue
-
         movie = movie_lookup.loc[movie_id]
-
         results.append(
             {
                 "movieId": int(movie_id),
@@ -128,6 +136,8 @@ def get_recommendations(
     return {
         "userId": user_id,
         "model": recommender.name,
+        "personalized": personalized,
+        "strategy": "hybrid" if personalized else "popularity-fallback",
         "count": len(results),
         "recommendations": results,
     }
