@@ -19,6 +19,7 @@ from recsys.data import (
 from recsys.models import (
     ALSRecommender,
     ContentBasedRecommender,
+    HybridRecommender,
     ItemKNNRecommender,
     PopularityRecommender,
     Recommender,
@@ -26,6 +27,7 @@ from recsys.models import (
 from recsys.stats import paired_bootstrap_diff
 
 COLUMNS = ["userId", "precision", "recall", "ndcg", "recs"]
+HYBRID_NAME = "hybrid-als+knn"
 
 
 def per_user_metrics(
@@ -86,6 +88,12 @@ def build_models(movies: pd.DataFrame, tags: pd.DataFrame) -> list[Recommender]:
     ]
 
 
+def build_hybrid(fitted: dict[str, Recommender]) -> HybridRecommender:
+    """Blend the two tuned collaborative models (already fitted) with equal weights."""
+    parts = [(fitted["als-liked"], 1.0), (fitted["itemknn-liked"], 1.0)]
+    return HybridRecommender(parts, prefit=True, name=HYBRID_NAME)
+
+
 def paired_vs_baseline(
     results: dict[str, pd.DataFrame], baseline: str = "popularity", k: int = config.TOP_K
 ) -> pd.DataFrame:
@@ -116,13 +124,17 @@ def main(split: str = "val", baseline: str = "popularity") -> None:
     n_items = len(movies)  # coverage is measured against the full catalog
 
     models = build_models(movies, tags)
-    if baseline not in {m.name for m in models}:
-        raise SystemExit(f"unknown baseline {baseline!r}; choose from {[m.name for m in models]}")
+    names = [m.name for m in models] + [HYBRID_NAME]
+    if baseline not in names:
+        raise SystemExit(f"unknown baseline {baseline!r}; choose from {names}")
 
-    results = {}
+    fitted, results = {}, {}
     for model in models:
         print(f"fitting {model.name} ...", flush=True)
-        results[model.name] = per_user_metrics(model.fit(train), eval_set)
+        fitted[model.name] = model.fit(train)
+        results[model.name] = per_user_metrics(fitted[model.name], eval_set)
+    hybrid = build_hybrid(fitted)
+    results[hybrid.name] = per_user_metrics(hybrid, eval_set)
 
     table = pd.DataFrame([summarise(n, df, n_items) for n, df in results.items()])
     print(f"\nResults on the {split} split (k={config.TOP_K})")
