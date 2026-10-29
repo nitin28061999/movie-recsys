@@ -1,0 +1,18 @@
+"""Central configuration: paths, seeds, evaluation settings."""
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+DATA_RAW = ROOT / "data" / "raw"
+DATA_PROCESSED = ROOT / "data" / "processed"
+MODEL_DIR = ROOT / "models"
+
+MOVIELENS_URL = "https://files.grouplens.org/datasets/movielens/ml-latest-small.zip"
+MOVIELENS_DIRNAME = "ml-latest-small"
+
+SEED = 42
+TOP_K = 10
+RELEVANCE_THRESHOLD = 4.0  # ratings >= this count as a "hit" in evaluation
+
+VAL_FRAC = 0.1
+TEST_FRAC = 0.1
+MIN_USER_INTERACTIONS = 5  # users below this stay entirely in train
