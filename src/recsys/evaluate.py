@@ -10,6 +10,7 @@ from recsys.data import (
     temporal_split,
 )
 from recsys.models import (
+    ALSRecommender,
     ContentBasedRecommender,
     ItemKNNRecommender,
     PopularityRecommender,
@@ -58,6 +59,8 @@ def main() -> None:
         ContentBasedRecommender(movies, tags),
         ItemKNNRecommender(),
         ItemKNNRecommender(min_rating=config.RELEVANCE_THRESHOLD),
+        ALSRecommender(),
+        ALSRecommender(min_rating=config.RELEVANCE_THRESHOLD),
     ]
     rows = [evaluate_model(m.fit(train), val, n_items) for m in models]
     print(pd.DataFrame(rows).round(4).to_string(index=False))
