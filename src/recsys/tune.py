@@ -3,7 +3,7 @@
     python -m recsys.tune als   # factors x regularization x alpha
     python -m recsys.tune knn   # n_neighbors x shrinkage
 Results are printed and saved to reports/tuning_<name>.csv. Copy the winning values
-into build_models() in evaluate.py.
+into ALS_PARAMS / KNN_PARAMS in config.py.
 """
 import argparse
 import itertools
@@ -20,11 +20,11 @@ LIKED = config.RELEVANCE_THRESHOLD
 GRIDS = {
     "als": (
         partial(ALSRecommender, min_rating=LIKED),
-        {"factors": [32, 64], "regularization": [0.01, 0.1, 1.0], "alpha": [10.0, 40.0]},
+        {"factors": [64, 128], "regularization": [1.0, 3.0], "alpha": [1.0, 3.0, 5.0, 10.0]},
     ),
     "knn": (
         partial(ItemKNNRecommender, min_rating=LIKED),
-        {"n_neighbors": [20, 50, 100], "shrinkage": [0.0, 10.0, 50.0]},
+        {"n_neighbors": [100, 200, 400], "shrinkage": [0.0, 1.0, 3.0]},
     ),
 }
 SORT_BY = f"ndcg@{config.TOP_K}"

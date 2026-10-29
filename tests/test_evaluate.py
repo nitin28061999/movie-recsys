@@ -1,7 +1,8 @@
+import numpy as np
 import pandas as pd
 import pytest
 
-from recsys.evaluate import evaluate_model, per_user_metrics
+from recsys.evaluate import evaluate_model, paired_vs_baseline, per_user_metrics
 from recsys.models import Recommender
 
 
@@ -34,3 +35,13 @@ def test_evaluate_model_summary(test_set):
     assert out["precision@3"] == pytest.approx(1 / 6)
     assert out["coverage"] == pytest.approx(0.3)
     assert out["users_evaluated"] == 2
+
+
+def test_paired_vs_baseline_flags_clear_differences():
+    rng = np.random.default_rng(0)
+    idx = pd.Index(range(1, 201), name="userId")
+    base = pd.DataFrame(rng.random((200, 3)) * 0.1, columns=["precision", "recall", "ndcg"], index=idx)
+    out = paired_vs_baseline({"base": base, "better": base + 0.2}, baseline="base")
+    assert list(out["model"]) == ["better"]
+    assert out.loc[0, "d_ndcg@10"].endswith("*")
+    assert "d_recall@10" in out.columns

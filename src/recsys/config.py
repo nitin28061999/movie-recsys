@@ -16,3 +16,8 @@ RELEVANCE_THRESHOLD = 4.0  # ratings >= this count as a "hit" in evaluation
 VAL_FRAC = 0.1
 TEST_FRAC = 0.1
 MIN_USER_INTERACTIONS = 5  # users below this stay entirely in train
+
+# Current best hyperparameters, chosen on the VALIDATION split via `python -m recsys.tune`.
+# Update these after each tuning round; evaluate.py uses them for both variants of a model.
+ALS_PARAMS = {"factors": 64, "regularization": 1.0, "alpha": 10.0}
+KNN_PARAMS = {"n_neighbors": 100, "shrinkage": 0.0}

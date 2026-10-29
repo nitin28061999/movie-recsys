@@ -1,7 +1,8 @@
 """Run every model through the same split + metrics, print one results table.
 
-    python -m recsys.evaluate               # score on the validation split (use while developing)
-    python -m recsys.evaluate --split test  # final numbers: train+val -> test (run this once)
+    python -m recsys.evaluate                          # validation split (use while developing)
+    python -m recsys.evaluate --baseline itemknn-liked # compare every model to a chosen model
+    python -m recsys.evaluate --split test             # final: train+val -> test (run this once)
 """
 import argparse
 
@@ -78,10 +79,10 @@ def build_models(movies: pd.DataFrame, tags: pd.DataFrame) -> list[Recommender]:
         PopularityRecommender(),
         ContentBasedRecommender(movies),
         ContentBasedRecommender(movies, tags),
-        ItemKNNRecommender(),
-        ItemKNNRecommender(min_rating=config.RELEVANCE_THRESHOLD),
-        ALSRecommender(),
-        ALSRecommender(min_rating=config.RELEVANCE_THRESHOLD),
+        ItemKNNRecommender(**config.KNN_PARAMS),
+        ItemKNNRecommender(min_rating=config.RELEVANCE_THRESHOLD, **config.KNN_PARAMS),
+        ALSRecommender(**config.ALS_PARAMS),
+        ALSRecommender(min_rating=config.RELEVANCE_THRESHOLD, **config.ALS_PARAMS),
     ]
 
 
@@ -95,7 +96,7 @@ def paired_vs_baseline(
         if name == baseline:
             continue
         row = {"model": name}
-        for metric in ("precision", "ndcg"):
+        for metric in ("precision", "recall", "ndcg"):
             diff, low, high = paired_bootstrap_diff(df.loc[base.index, metric], base[metric])
             flag = "*" if low > 0 or high < 0 else ""
             row[f"d_{metric}@{k}"] = f"{diff:+.4f} [{low:+.4f}, {high:+.4f}]{flag}"
@@ -103,7 +104,7 @@ def paired_vs_baseline(
     return pd.DataFrame(rows)
 
 
-def main(split: str = "val") -> None:
+def main(split: str = "val", baseline: str = "popularity") -> None:
     download_movielens()
     ratings = load_ratings()
     movies, tags = load_movies(), load_tags()
@@ -114,19 +115,25 @@ def main(split: str = "val") -> None:
         eval_set = val
     n_items = len(movies)  # coverage is measured against the full catalog
 
+    models = build_models(movies, tags)
+    if baseline not in {m.name for m in models}:
+        raise SystemExit(f"unknown baseline {baseline!r}; choose from {[m.name for m in models]}")
+
     results = {}
-    for model in build_models(movies, tags):
+    for model in models:
         print(f"fitting {model.name} ...", flush=True)
         results[model.name] = per_user_metrics(model.fit(train), eval_set)
 
     table = pd.DataFrame([summarise(n, df, n_items) for n, df in results.items()])
     print(f"\nResults on the {split} split (k={config.TOP_K})")
     print(table.round(4).to_string(index=False))
-    print("\nDifference vs popularity: mean over users [95% bootstrap CI]; * = CI excludes 0")
-    print(paired_vs_baseline(results).to_string(index=False))
+    print(f"\nDifference vs {baseline}: mean over users [95% bootstrap CI]; * = CI excludes 0")
+    print(paired_vs_baseline(results, baseline).to_string(index=False))
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument("--split", choices=["val", "test"], default="val")
-    main(parser.parse_args().split)
+    parser.add_argument("--baseline", default="popularity", help="model to compare all others to")
+    args = parser.parse_args()
+    main(args.split, args.baseline)
