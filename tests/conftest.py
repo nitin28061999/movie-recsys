@@ -1,5 +1,7 @@
-import pandas as pd
-import pytest
+"""Shared pytest fixtures for the movie recommendation tests."""
+
+import pandas as pd  # pylint: disable=import-error
+import pytest  # pylint: disable=import-error
 
 
 @pytest.fixture
