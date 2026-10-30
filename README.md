@@ -45,10 +45,25 @@ Evaluation performed on **573 users**, with the top 10 recommendations per user.
 
 ### Key Findings
 
-- The Hybrid ALS + ItemKNN model achieved the best Precision@10, Recall@10, and NDCG@10 among the evaluated models.
-- Compared with ItemKNN-Liked, the hybrid model improved Precision@10 by approximately 10.2%, Recall@10 by 15.9%, and NDCG@10 by 10.8%.
-- ALS-Liked achieved higher catalog coverage than the hybrid model, demonstrating a trade-off between recommendation relevance and catalog diversity.
-- Bootstrap confidence intervals indicated statistically significant improvements over the popularity baseline for the three ranking metrics.
+Evaluated on 573 users (chronological split, test set; models fit on train + validation,
+hyperparameters tuned on validation only). A recommendation counts as a hit when the user
+later rated that movie 4 or higher. Differences use paired bootstrap 95% confidence
+intervals over users.
+
+- The Hybrid ALS + ItemKNN model scored highest on Precision@10 (0.0529), Recall@10 (0.0959)
+  and NDCG@10 (0.0833). Versus the popularity baseline that is about 68% higher precision,
+  about 2x recall and about 67% higher NDCG, all statistically significant.
+- Versus the strongest single model, ItemKNN-Liked, the hybrid's gains in Precision@10
+  (+0.0049) and Recall@10 (+0.0132) are statistically significant but small; the NDCG@10
+  gain (+0.0081) is not (CI [-0.0002, +0.0169]). ItemKNN-Liked and ALS-Liked are
+  statistically tied.
+- Training only on movies users liked (rating >= 4) mattered more than model choice:
+  ItemKNN-Liked beat plain ItemKNN significantly on all three metrics.
+- The content-based models (genres, genres + tags) scored significantly below popularity,
+  so they are reported as baselines and are not part of the hybrid. They do reach about 10%
+  of the catalog versus about 1% for popularity.
+- All models recommend from a small slice of the catalog (under 11%), so popularity bias
+  is a known limitation. ALS-Liked has higher coverage (7.4%) than the hybrid (5.9%).
 
 ## 🏗️ Project Architecture
 

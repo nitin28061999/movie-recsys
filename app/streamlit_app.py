@@ -5,6 +5,7 @@ import re
 
 import requests
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 
 # Override with the API_URL environment variable when the backend runs elsewhere.
 API_URL = os.environ.get("API_URL", "http://127.0.0.1:8001").rstrip("/")
@@ -108,76 +109,79 @@ def api_get(endpoint, params=None, timeout=20):
     return response.json()
 
 
-# -------------------- WIKIPEDIA POSTER FETCHING --------------------
+# -------------------- MOVIE POSTERS (TMDB) --------------------
 
-@st.cache_data(ttl=86400, show_spinner=False)
-def get_wikipedia_poster(movie_title):
-    """Fetch a movie poster thumbnail from Wikipedia."""
+TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w185"
+
+
+def get_tmdb_key():
+    """Read the TMDB key from the TMDB_API_KEY env var or Streamlit secrets (None if unset)."""
+
+    key = os.environ.get("TMDB_API_KEY")
+
+    if key:
+        return key
 
     try:
-        match = re.search(r"\((\d{4})\)\s*$", movie_title)
-        year = match.group(1) if match else ""
+        return st.secrets.get("TMDB_API_KEY")
+    except (StreamlitSecretNotFoundError, KeyError):  # no secrets file or no such key
+        return None
 
-        clean_title = re.sub(
-            r"\s*\(\d{4}\)\s*$",
-            "",
-            movie_title,
-        ).strip()
 
-        # Convert MovieLens titles:
-        # Matrix, The -> The Matrix
+def clean_movielens_title(movie_title):
+    """Turn 'Matrix, The (1999)' into ('The Matrix', '1999')."""
 
-        clean_title = re.sub(
-            r",\s*(The|A|An)$",
-            lambda m: f" {m.group(1)}",
-            clean_title,
-            flags=re.IGNORECASE,
-        )
+    match = re.search(r"\((\d{4})\)\s*$", movie_title)
+    year = match.group(1) if match else None
 
-        search_query = f"{clean_title} film {year}".strip()
+    title = re.sub(r"\s*\(\d{4}\)\s*$", "", movie_title)
+    title = re.sub(r"\s*\([^)]*\)", "", title).strip()  # drop alternate titles
 
+    article = re.match(r"^(.*),\s*(The|A|An)$", title, flags=re.IGNORECASE)
+
+    if article:
+        title = f"{article.group(2)} {article.group(1)}"
+
+    return title, year
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def get_poster(movie_title, api_key):
+    """Look up a poster on TMDB. Returns None when there is no key or no match.
+
+    The key is an argument so the cache is not poisoned by lookups made without one.
+    """
+
+    if not api_key:
+        return None
+
+    title, year = clean_movielens_title(movie_title)
+
+    params = {"query": title, "include_adult": "false"}
+    headers = {}
+
+    if year:
+        params["year"] = year
+
+    if api_key.startswith("eyJ"):  # v4 "API Read Access Token"
+        headers["Authorization"] = f"Bearer {api_key}"
+    else:  # v3 API key
+        params["api_key"] = api_key
+
+    try:
         response = requests.get(
-            "https://en.wikipedia.org/w/api.php",
-            params={
-                "action": "query",
-                "generator": "search",
-                "gsrsearch": search_query,
-                "gsrlimit": 5,
-                "prop": "pageimages",
-                "piprop": "thumbnail",
-                "pithumbsize": 342,
-                "format": "json",
-            },
-            headers={
-                "User-Agent": "CineMatchMovieRecommender/1.0"
-            },
+            "https://api.themoviedb.org/3/search/movie",
+            params=params,
+            headers=headers,
             timeout=8,
         )
-
         response.raise_for_status()
 
-        pages = response.json().get(
-            "query", {}
-        ).get("pages", {})
+        for result in response.json().get("results", []):
+            if result.get("poster_path"):
+                return f"{TMDB_IMAGE_BASE}{result['poster_path']}"
 
-        sorted_pages = sorted(
-            pages.values(),
-            key=lambda page: page.get("index", 999),
-        )
-
-        for page in sorted_pages:
-            thumbnail = page.get(
-                "thumbnail", {}
-            ).get("source")
-
-            if thumbnail:
-                return thumbnail
-
-    except (
-        requests.RequestException,
-        ValueError,
-        TypeError,
-    ):
+    except (requests.RequestException, ValueError):
         return None
 
     return None
@@ -251,13 +255,13 @@ def display_movie_card(
         get_movie_details(movie_item)
     )
 
-    # Fetch Wikipedia poster if API poster is unavailable.
+    # Look up a TMDB poster if the API did not supply one.
 
     if not (
         isinstance(poster, str)
         and poster.startswith(("https://", "http://"))
     ):
-        poster = get_wikipedia_poster(title)
+        poster = get_poster(title, get_tmdb_key())
 
     with st.container(border=True):
 
@@ -332,16 +336,10 @@ st.sidebar.caption(
 # -------------------- HERO HEADER --------------------
 
 st.markdown(
-    """
-    <div class="hero">
-        <h1>🎬 Discover Your Next Favourite Movie</h1>
-
-        <p>
-            Personalized movie recommendations powered by a
-            hybrid recommendation engine.
-        </p>
-    </div>
-    """,
+    '<div class="hero">'
+    "<h1>🎬 Discover Your Next Favourite Movie</h1>"
+    "<p>Personalized movie recommendations powered by a hybrid recommendation engine.</p>"
+    "</div>",
     unsafe_allow_html=True,
 )
 
@@ -669,3 +667,8 @@ st.caption(
     "CineMatch | Hybrid Movie Recommendation System | "
     "Powered by MovieLens, FastAPI and Streamlit"
 )
+
+if get_tmdb_key():
+    st.caption(
+        "This product uses the TMDB API but is not endorsed or certified by TMDB."
+    )
