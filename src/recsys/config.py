@@ -1,7 +1,10 @@
 """Central configuration: paths, seeds, evaluation settings."""
+import os
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+# RECSYS_HOME overrides the project root (the Docker image sets it to /app, because a
+# pip-installed package no longer sits next to data/ and models/).
+ROOT = Path(os.environ.get("RECSYS_HOME") or Path(__file__).resolve().parents[2])
 DATA_RAW = ROOT / "data" / "raw"
 DATA_PROCESSED = ROOT / "data" / "processed"
 MODEL_DIR = ROOT / "models"

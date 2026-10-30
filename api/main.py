@@ -4,41 +4,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 
-from recsys import config
-from recsys.data import download_movielens, load_movies, load_ratings
-from recsys.models import (
-    ALSRecommender,
-    HybridRecommender,
-    ItemKNNRecommender,
-)
+from recsys.train import load_or_train
 
 
 def build_recommender():
-    """Fit the recommendation models on the available ratings history."""
-    download_movielens()
-
-    ratings = load_ratings()
-    movies = load_movies()
-
-    als = ALSRecommender(
-        **config.ALS_PARAMS,
-        min_rating=config.RELEVANCE_THRESHOLD,
-    )
-    knn = ItemKNNRecommender(
-        **config.KNN_PARAMS,
-        min_rating=config.RELEVANCE_THRESHOLD,
-    )
-
-    als.fit(ratings)
-    knn.fit(ratings)
-
-    hybrid = HybridRecommender(
-        [(als, 1.0), (knn, 1.0)],
-        prefit=True,
-        name="hybrid-als+knn",
-    )
-
-    return hybrid, movies, ratings
+    """Load the trained recommender, training it first if no saved model exists."""
+    return load_or_train()
 
 
 @asynccontextmanager

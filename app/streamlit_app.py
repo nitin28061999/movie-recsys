@@ -1,11 +1,13 @@
-﻿"""CineMatch Streamlit Movie Recommendation Application."""
+"""CineMatch Streamlit Movie Recommendation Application."""
 
+import os
 import re
 
 import requests
 import streamlit as st
 
-API_URL = "http://127.0.0.1:8001"
+# Override with the API_URL environment variable when the backend runs elsewhere.
+API_URL = os.environ.get("API_URL", "http://127.0.0.1:8001").rstrip("/")
 
 # -------------------- PAGE CONFIGURATION --------------------
 
@@ -305,8 +307,8 @@ st.sidebar.markdown("---")
 st.sidebar.subheader("About the Project")
 
 st.sidebar.write(
-    "Discover movies using collaborative filtering, "
-    "content-based filtering, and hybrid recommendation."
+    "Discover movies through collaborative filtering: ALS and item-based "
+    "kNN, blended by rank fusion."
 )
 
 st.sidebar.markdown("---")
@@ -315,10 +317,8 @@ st.sidebar.subheader("Recommendation Models")
 
 st.sidebar.markdown(
     """
-    - ALS Collaborative Filtering
-    - Item-Based KNN
-    - Content-Based Filtering
-    - Hybrid ALS + ItemKNN
+    - **Serving:** Hybrid ALS + ItemKNN (rank fusion)
+    - **Also evaluated:** Popularity, Content-Based, ItemKNN, ALS
     """
 )
 
@@ -367,8 +367,8 @@ except (
 
 if not API_HEALTHY:
     st.error(
-        "Backend API is unavailable. "
-        "Start FastAPI on port 8001 and refresh this page."
+        f"Backend API is unavailable at {API_URL}. "
+        "Start FastAPI and refresh this page."
     )
     st.stop()
 
@@ -385,8 +385,6 @@ try:
             "/users",
             params={"limit": 100},
         )
-        st.write("DEBUG - Users API response:", users_data)
-        st.write("DEBUG - Response type:", type(users_data))
 
     # Extract user IDs directly from the API response.
     if isinstance(users_data, dict):
@@ -540,6 +538,15 @@ with recommendation_tab:
                 st.success(
                     f"Found {len(recommendations)} recommendations."
                 )
+
+                if (
+                    isinstance(recommendations_data, dict)
+                    and recommendations_data.get("personalized") is False
+                ):
+                    st.info(
+                        "This user has no usable rating history, so these "
+                        "are popular movies rather than personalised picks."
+                    )
 
                 for index, movie in enumerate(
                     recommendations,

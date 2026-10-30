@@ -11,7 +11,8 @@ dependencies = ["pandas", "numpy", "scipy", "scikit-learn", "pyarrow"]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff", "httpx"]
-app = ["fastapi", "uvicorn[standard]", "streamlit"]
+api = ["fastapi", "uvicorn[standard]"]
+app = ["fastapi", "uvicorn[standard]", "streamlit", "requests"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

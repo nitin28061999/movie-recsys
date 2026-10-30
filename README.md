@@ -72,6 +72,8 @@ movie-recsys/
 │       ├── evaluate.py
 │       ├── metrics.py
 │       ├── stats.py
+│       ├── train.py
+│       ├── tune.py
 │       └── models/
 │           ├── als.py
 │           ├── base.py
@@ -80,7 +82,9 @@ movie-recsys/
 │           ├── itemknn.py
 │           └── popularity.py
 │
+├── reports/
 ├── tests/
+├── Dockerfile
 ├── pyproject.toml
 ├── README.md
 └── .gitignore
@@ -125,17 +129,10 @@ Windows PowerShell:
 pip install -e ".[dev,app]"
 ```
 
-### 4. Download the MovieLens dataset
+### 4. Dataset
 
-Download the **MovieLens latest-small dataset** from:
-
-<https://grouplens.org/datasets/movielens/latest/>
-
-Extract the dataset into:
-
-```text
-data/raw/ml-latest-small/
-```
+The **MovieLens latest-small** dataset is downloaded automatically into
+`data/raw/ml-latest-small/` the first time you run the evaluation or the API.
 
 ### 5. Run tests
 
@@ -146,21 +143,31 @@ pytest
 ### 6. Run model evaluation
 
 ```bash
-python -m recsys.evaluate
+python -m recsys.evaluate               # validation split (used while developing)
+python -m recsys.evaluate --split test  # final numbers: fit on train + validation, score on test
 ```
+
+**Evaluation protocol:** each user's ratings are split chronologically (oldest 80% train,
+next 10% validation, newest 10% test); a recommendation counts as a hit when the user later
+rated that movie 4 or higher; hyperparameters were tuned on the validation split only
+(`python -m recsys.tune als`, `python -m recsys.tune knn`).
 
 ## 🌐 FastAPI Endpoints
 
 Start the backend:
 
 ```bash
-python -m uvicorn api.main:app --reload
+python -m uvicorn api.main:app --port 8001 --reload
 ```
+
+The first start trains the model on all ratings and saves it to `models/`; later starts load
+it from disk. To train ahead of time, run `python -m recsys.train` (it retrains automatically
+when the hyperparameters in `src/recsys/config.py` change).
 
 API documentation:
 
 ```text
-http://127.0.0.1:8000/docs
+http://127.0.0.1:8001/docs
 ```
 
 | Endpoint | Description |
@@ -170,6 +177,28 @@ http://127.0.0.1:8000/docs
 | `GET /movies/search?q=Batman` | Search movies |
 | `GET /recommendations/{user_id}?k=10` | Get personalized recommendations |
 | `GET /users?limit=20` | Retrieve available users |
+
+## 🖥️ Streamlit App
+
+With the API running, start the frontend in a second terminal:
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+The app expects the API at `http://127.0.0.1:8001`. To point it elsewhere, set the
+`API_URL` environment variable first (for example `$env:API_URL = "https://your-api-host"`
+in PowerShell).
+
+## 🐳 Docker
+
+The image installs only the API dependencies and trains the model at build time, so containers
+start without downloading data:
+
+```bash
+docker build -t movie-recsys-api .
+docker run -p 8000:8000 movie-recsys-api
+```
 
 ## 📈 Evaluation Metrics
 
