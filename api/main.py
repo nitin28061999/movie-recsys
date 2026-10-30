@@ -116,7 +116,7 @@ def get_recommendations(
 
 @app.get("/users")
 def list_users(
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=1000),
 ):
     """List sample users available in the ratings dataset."""
     user_ids = sorted(app.state.ratings["userId"].unique())[:limit]
