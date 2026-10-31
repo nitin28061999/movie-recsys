@@ -205,6 +205,18 @@ The app expects the API at `http://127.0.0.1:8001`. To point it elsewhere, set t
 `API_URL` environment variable first (for example `$env:API_URL = "https://your-api-host"`
 in PowerShell).
 
+### Deploy the frontend to Streamlit Community Cloud
+
+Push the repository to GitHub, then create an app at <https://share.streamlit.io>.
+Select the repository and branch, and set the app file to `app/streamlit_app.py`.
+The frontend dependencies are listed in `app/requirements.txt`.
+
+In the app's **Advanced settings → Secrets**, add the Render API URL:
+
+```toml
+API_URL = "https://movie-recsys-s2lx.onrender.com"
+```
+
 ## 🐳 Docker
 
 The image installs only the API dependencies and trains the model at build time, so containers
