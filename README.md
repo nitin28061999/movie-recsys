@@ -215,6 +215,30 @@ docker build -t movie-recsys-api .
 docker run -p 8000:8000 movie-recsys-api
 ```
 
+## 🚀 Deploy the API to Render
+
+The repository includes a `render.yaml` Blueprint for the FastAPI backend. It builds
+the existing Dockerfile, checks `/health`, and uses Render's `PORT` environment variable.
+
+1. Push this project to a GitHub repository.
+2. In Render, choose **New → Blueprint** and connect the repository.
+3. Review the `cinematch-api` web service and deploy it.
+4. When the deploy finishes, open `https://<your-service>.onrender.com/health` and
+   `https://<your-service>.onrender.com/docs`.
+
+Point the Streamlit app at the deployed API by setting `API_URL` to the service URL
+in the frontend host's environment variables or Streamlit secrets. For a local
+PowerShell session:
+
+```powershell
+$env:API_URL = "https://<your-service>.onrender.com"
+streamlit run app/streamlit_app.py
+```
+
+The free Render service can sleep after 15 minutes without traffic, so its first
+request after sleeping may take about a minute. The model is trained during the
+Docker image build, so the service does not need to download MovieLens data at startup.
+
 ## 📈 Evaluation Metrics
 
 - **Precision@K:** Measures the proportion of recommended movies that are relevant.
@@ -224,7 +248,7 @@ docker run -p 8000:8000 movie-recsys-api
 
 ## 🔮 Future Improvements
 
-- Deploy the FastAPI backend and Streamlit frontend.
+- Deploy the Streamlit frontend and connect it to the Render API.
 - Add user authentication and personalized user profiles.
 - Experiment with additional hybrid ranking strategies.
 - Improve recommendation diversity and cold-start handling.

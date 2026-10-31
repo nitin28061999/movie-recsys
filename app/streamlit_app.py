@@ -1,14 +1,27 @@
 """CineMatch Streamlit Movie Recommendation Application."""
 
+import hashlib
 import os
 import re
+from io import BytesIO
+
+from PIL import Image, ImageDraw, ImageFont
 
 import requests
 import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
 
-# Override with the API_URL environment variable when the backend runs elsewhere.
-API_URL = os.environ.get("API_URL", "http://127.0.0.1:8001").rstrip("/")
+def get_api_url():
+    """Read the backend URL from an environment variable or Streamlit secrets."""
+
+    url = os.environ.get("API_URL")
+    if url:
+        return url.rstrip("/")
+    try:
+        url = st.secrets.get("API_URL")
+        return (url or "http://127.0.0.1:8001").rstrip("/")
+    except (StreamlitSecretNotFoundError, KeyError):
+        return "http://127.0.0.1:8001"
 
 # -------------------- PAGE CONFIGURATION --------------------
 
@@ -19,72 +32,88 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+API_URL = get_api_url()
+
 
 # -------------------- CUSTOM CSS --------------------
 
 st.markdown(
     """
     <style>
-    .stApp {
-        background: linear-gradient(135deg, #10131f 0%, #171b2e 100%);
-        color: #f5f5f5;
-    }
-
-    [data-testid="stSidebar"] {
-        background: #111522;
-        border-right: 1px solid #292f43;
-    }
-
     .hero {
-        padding: 28px;
+        position: relative;
+        overflow: hidden;
+        padding: 42px 44px;
         border-radius: 18px;
-        background: linear-gradient(110deg, #252c49, #42245b);
-        border: 1px solid #41476a;
-        margin-bottom: 24px;
+        background: linear-gradient(115deg, rgba(9,9,9,.96) 5%, rgba(35,13,17,.91) 54%, rgba(89,8,16,.88)),
+                    radial-gradient(circle at 82% 22%, #e50914 0%, #4a1117 35%, #111 72%);
+        border: 1px solid #51242a;
+        box-shadow: 0 18px 50px rgba(0,0,0,.34);
+        margin: 10px 0 26px;
     }
 
     .hero h1 {
-        font-size: 36px;
-        margin-bottom: 8px;
-        color: white;
+        max-width: 760px;
+        font-size: clamp(32px, 4vw, 54px);
+        line-height: 1.04;
+        letter-spacing: -1.8px;
+        margin: 8px 0 12px;
+        color: #fff;
     }
 
-    .hero p {
-        color: #d5d8e8;
-        font-size: 15px;
+    .hero .hero-kicker {
+        color: #ff5962;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 2.4px;
+        margin: 0;
     }
 
-    .movie-card {
-        background: #20263a;
-        border: 1px solid #343c55;
+    .hero .hero-copy {
+        color: #d0c8c9;
+        font-size: 16px;
+        max-width: 620px;
+        margin: 0;
+    }
+
+    [data-testid="stMetric"] {
+        background: linear-gradient(145deg, #1c1c1c, #131313);
+        border: 1px solid #303030;
         border-radius: 14px;
-        padding: 16px;
-        margin-bottom: 12px;
+        padding: 16px 18px;
+        box-shadow: 0 8px 24px rgba(0,0,0,.18);
     }
 
-    .movie-title {
-        font-size: 17px;
-        font-weight: 650;
-        color: #ffffff;
+    [data-testid="stMetricValue"] {
+        color: #fff;
+        font-weight: 750;
     }
 
-    .movie-meta {
-        color: #aeb7d0;
-        font-size: 13px;
-        margin-top: 6px;
-    }
-
-    div[data-testid="stMetric"] {
-        background: #20263a;
-        border: 1px solid #343c55;
-        padding: 14px;
-        border-radius: 12px;
+    [data-testid="stTabs"] button[aria-selected="true"] {
+        color: #ff4b55;
     }
 
     .section-heading {
-        font-size: 23px;
-        font-weight: 700;
-        margin: 14px 0;
+        font-size: 25px;
+        font-weight: 760;
+        letter-spacing: -.4px;
+        margin: 20px 0 6px;
+    }
+
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        border-color: #303030;
+        background: linear-gradient(160deg, #191919, #111111);
+        transition: transform .18s ease, border-color .18s ease;
+    }
+
+    [data-testid="stVerticalBlockBorderWrapper"]:hover {
+        border-color: #8f2229;
+        transform: translateY(-3px);
+    }
+
+    [data-testid="stButton"] button[kind="primary"] {
+        font-weight: 750;
+        box-shadow: 0 8px 24px rgba(229,9,20,.2);
     }
 
     </style>
@@ -143,6 +172,78 @@ def clean_movielens_title(movie_title):
         title = f"{article.group(2)} {article.group(1)}"
 
     return title, year
+
+
+@st.cache_data(show_spinner=False, max_entries=500)
+def make_local_poster(movie_title, genres=""):
+    """Create original, colorful poster art when no external poster is available."""
+
+    width, height = 480, 720
+    seed = int(hashlib.sha256(f"{movie_title}|{genres}".encode()).hexdigest()[:8], 16)
+    palettes = [
+        ((120, 15, 28), (12, 15, 29), (240, 69, 75)),
+        ((26, 75, 104), (13, 17, 39), (77, 199, 220)),
+        ((123, 67, 17), (28, 16, 28), (255, 184, 76)),
+        ((75, 31, 106), (15, 14, 36), (197, 107, 239)),
+        ((17, 104, 76), (10, 21, 29), (87, 222, 153)),
+    ]
+    top, bottom, accent = palettes[seed % len(palettes)]
+    image = Image.new("RGB", (width, height))
+    draw = ImageDraw.Draw(image)
+
+    for y in range(height):
+        mix = y / height
+        color = tuple(round(a * (1 - mix) + b * mix) for a, b in zip(top, bottom))
+        draw.line((0, y, width, y), fill=color)
+
+    glow = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow)
+    glow_draw.ellipse((190, 90, 650, 540), fill=(*accent, 46))
+    glow_draw.ellipse((-210, 330, 280, 820), fill=(*accent, 24))
+    image = Image.alpha_composite(image.convert("RGBA"), glow)
+    draw = ImageDraw.Draw(image)
+
+    try:
+        font_brand = ImageFont.truetype("DejaVuSans-Bold.ttf", 20)
+        font_title = ImageFont.truetype("DejaVuSans-Bold.ttf", 42)
+        font_meta = ImageFont.truetype("DejaVuSans.ttf", 19)
+    except OSError:
+        font_brand = ImageFont.load_default(size=20)
+        font_title = ImageFont.load_default(size=42)
+        font_meta = ImageFont.load_default(size=19)
+
+    draw.rounded_rectangle((28, 28, width - 28, height - 28), radius=18, outline=(255, 255, 255, 72), width=2)
+    draw.rounded_rectangle((50, 54, 58, 110), radius=4, fill=(*accent, 255))
+    draw.text((74, 65), "CINEMATCH", font=font_brand, fill=(255, 255, 255, 235))
+    draw.text((50, 385), "TONIGHT'S PICK", font=font_meta, fill=(*accent, 255))
+
+    title, year = clean_movielens_title(movie_title)
+    words = title.split()
+    lines, current = [], ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if draw.textbbox((0, 0), candidate, font=font_title)[2] > width - 100 and current:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    if len(lines) > 4:
+        lines = lines[:3] + [lines[3].rstrip(".,:;!") + "…"]
+
+    y = 430
+    for line in lines:
+        draw.text((50, y), line, font=font_title, fill=(255, 255, 255, 255), stroke_width=1)
+        y += 52
+    footer = "  •  ".join((genres or "Movie night").split("|")[:3])
+    if year:
+        footer = f"{year}  •  {footer}"
+    draw.text((50, height - 88), footer[:42], font=font_meta, fill=(238, 229, 229, 235))
+
+    output = BytesIO()
+    image.convert("RGB").save(output, format="JPEG", quality=88, optimize=True)
+    return output.getvalue()
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -249,7 +350,7 @@ def display_movie_card(
     position=None,
     show_score=False,
 ):
-    """Render a movie card with its poster, metadata and optional score."""
+    """Render a compact title card with a real or locally generated cover."""
 
     title, score, genres, poster, movie_id = (
         get_movie_details(movie_item)
@@ -262,40 +363,34 @@ def display_movie_card(
         and poster.startswith(("https://", "http://"))
     ):
         poster = get_poster(title, get_tmdb_key())
+    if not poster:
+        poster = make_local_poster(title, genres or "")
 
-    with st.container(border=True):
+    with st.container(border=True, gap="small"):
+        if position is not None:
+            st.badge(f"#{position} for you", color="red")
+        st.image(poster, width="stretch")
+        st.markdown(f"**{title}**")
+        if show_score and score is not None:
+            st.caption(f"Recommendation score: {score}")
+        if genres:
+            st.caption(" · ".join(genres.split("|")[:3]))
+        if movie_id is not None:
+            st.caption(f"MovieLens ID {movie_id}")
 
-        image_col, details_col = st.columns(
-            [1, 4],
-            vertical_alignment="center",
-        )
 
-        with image_col:
+def display_movie_shelf(movies, show_score=False):
+    """Lay out results in poster rows that adapt to narrow screens."""
 
-            if poster:
-                st.image(poster, width=120)
-
-            else:
-                st.markdown("🎬")
-                st.caption("Poster unavailable")
-
-        with details_col:
-
-            if position is not None:
-                st.markdown(f"### {position}. {title}")
-            else:
-                st.markdown(f"### 🎞️ {title}")
-
-            if show_score and score is not None:
-                st.caption(
-                    f"⭐ Recommendation score: {score}"
+    for offset in range(0, len(movies), 5):
+        columns = st.columns(5, gap="small")
+        for index, (column, movie) in enumerate(zip(columns, movies[offset : offset + 5])):
+            with column:
+                display_movie_card(
+                    movie,
+                    position=offset + index + 1,
+                    show_score=show_score,
                 )
-
-            if genres:
-                st.caption(f"Genres: {genres}")
-
-            if movie_id is not None:
-                st.caption(f"Movie ID: {movie_id}")
 
 
 # -------------------- SIDEBAR --------------------
@@ -337,8 +432,9 @@ st.sidebar.caption(
 
 st.markdown(
     '<div class="hero">'
-    "<h1>🎬 Discover Your Next Favourite Movie</h1>"
-    "<p>Personalized movie recommendations powered by a hybrid recommendation engine.</p>"
+    '<p class="hero-kicker">YOUR NEXT MOVIE NIGHT STARTS HERE</p>'
+    "<h1>Stories picked for you.</h1>"
+    '<p class="hero-copy">Discover your next favourite with recommendations shaped by movie fans like you.</p>'
     "</div>",
     unsafe_allow_html=True,
 )
@@ -546,16 +642,7 @@ with recommendation_tab:
                         "are popular movies rather than personalised picks."
                     )
 
-                for index, movie in enumerate(
-                    recommendations,
-                    start=1,
-                ):
-
-                    display_movie_card(
-                        movie,
-                        position=index,
-                        show_score=True,
-                    )
+                display_movie_shelf(recommendations, show_score=True)
 
         except requests.RequestException as error:
 
@@ -639,12 +726,7 @@ with search_tab:
                         f"Found {len(movies)} matching movies."
                     )
 
-                    for movie in movies:
-
-                        display_movie_card(
-                            movie,
-                            show_score=False,
-                        )
+                    display_movie_shelf(movies, show_score=False)
 
             except requests.RequestException as error:
 
