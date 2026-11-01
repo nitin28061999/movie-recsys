@@ -5,11 +5,11 @@ import os
 import re
 from io import BytesIO
 
-from PIL import Image, ImageDraw, ImageFont
-
 import requests
 import streamlit as st
+from PIL import Image, ImageDraw, ImageFont
 from streamlit.errors import StreamlitSecretNotFoundError
+
 
 def get_api_url():
     """Read the backend URL from an environment variable or Streamlit secrets."""
@@ -158,6 +158,7 @@ def get_tmdb_key():
 
 
 def clean_movielens_title(movie_title):
+    # sourcery skip: use-getitem-for-re-match-groups
     """Turn 'Matrix, The (1999)' into ('The Matrix', '1999')."""
 
     match = re.search(r"\((\d{4})\)\s*$", movie_title)
@@ -169,7 +170,7 @@ def clean_movielens_title(movie_title):
     article = re.match(r"^(.*),\s*(The|A|An)$", title, flags=re.IGNORECASE)
 
     if article:
-        title = f"{article.group(2)} {article.group(1)}"
+        title = f"{article[2]} {article.group(1)}"
 
     return title, year
 
@@ -440,36 +441,31 @@ st.markdown(
 )
 
 
+
 # -------------------- API HEALTH CHECK --------------------
 
 try:
-    health = api_get(
-        "/health",
-        timeout=5,
-    )
+    health = api_get("/health", timeout=15)
 
-    API_HEALTHY = (
-        isinstance(health, dict)
-        and health.get("status") == "ok"
-    )
+    # A successful HTTP response confirms that the API is reachable.
+    API_HEALTHY = isinstance(health, (dict, list))
 
-except (
-    requests.RequestException,
-    ValueError,
-):
-    API_HEALTHY = False
+    if not API_HEALTHY:
+        st.error(f"Unexpected health-check response: {health}")
+        st.stop()
 
-if not API_HEALTHY:
+except requests.RequestException as error:
     st.error(
-        f"Backend API is unavailable at {API_URL}. "
-        "Start FastAPI and refresh this page."
+        f"Backend connection failed: {API_URL}\n\n"
+        f"Error: {error}"
     )
     st.stop()
 
+except ValueError as error:
+    st.error(f"Invalid health-check JSON response: {error}")
+    st.stop()
+
 st.success("Backend connected successfully")
-
-
-
 
 # -------------------- LOAD USERS --------------------
 
@@ -481,20 +477,15 @@ try:
         )
 
     # Extract user IDs directly from the API response.
-    if isinstance(users_data, dict):
-        users = users_data.get("userIds", [])
-
-        # Support alternative response formats.
-        if not users:
-            users = users_data.get(
-                "users",
-                users_data.get("results", users_data.get("data", [])),
-            )
-    elif isinstance(users_data, list):
-        users = users_data
-    else:
-        users = []
-
+    users = (
+        users_data
+        if isinstance(users_data, list)
+        else users_data.get("userIds", [])
+        or users_data.get(
+            "users",
+            users_data.get("results", users_data.get("data", [])),
+        )
+    )
     user_ids = []
 
     for user in users:
